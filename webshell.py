@@ -1,17 +1,18 @@
-#!/usr/bin/python2
 # vim: tabstop=8 noexpandtab shiftwidth=8 softtabstop=8 list
 
 """ WebShell Server """
+import subprocess
+
 """ Released under the GPL 2.0 by Marc S. Ressl """
 
 version = "0.9.6"
 
 import array, time, glob, optparse, random, re
 import socket, os, sys, pty, signal, select, gzip
-import commands, threading, fcntl, termios, struct, pwd
+import threading, fcntl, termios, struct, pwd
 import cgi, mimetypes
-from SocketServer import BaseServer
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from socketserver import BaseServer
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 try:
 	openssl_installed = False
@@ -250,7 +251,7 @@ class Terminal:
 					self.utf8_char = (self.utf8_char << 6) | (char & 0x3f)
 					if self.utf8_units_count == self.utf8_units_received:
 						if self.utf8_char<0x10000:
-							o += unichr(self.utf8_char)
+							o += chr(self.utf8_char)
 						self.utf8_units_count = self.utf8_units_received = 0
 				else:
 					o += '?'
@@ -898,13 +899,13 @@ class Terminal:
 						char_msb = char & 0xf0
 						if char_msb == 0x20:
 							# Intermediate bytes (added to function)
-							self.vt100_parse_func += unichr(char)
+							self.vt100_parse_func += chr(char)
 						elif char_msb == 0x30 and self.vt100_parse_state == 'csi':
 							# Parameter byte
-							self.vt100_parse_param += unichr(char)
+							self.vt100_parse_param += chr(char)
 						else:
 							# Function byte
-							self.vt100_parse_func += unichr(char)
+							self.vt100_parse_func += chr(char)
 							self.vt100_parse_process()
 						return True
 		self.vt100_lastchar = char
@@ -1002,7 +1003,7 @@ class Terminal:
 				else:
 					wx += self.utf8_charwidth(char)
 					if wx <= self.w:
-						dump += unichr(char)
+						dump += chr(char)
 			dump += "\n"
 		# Encode in UTF-8
 		dump = dump.encode('utf-8')
@@ -1030,7 +1031,7 @@ class SynchronizedMethod:
 class Multiplex:
 	def __init__(self, cmd = None, env_term = None):
 		# Set Linux signal handler
-		uname = commands.getoutput('uname')
+		uname = subprocess.check_output(['uname'])
 		if uname == 'Linux':
 			self.sigchldhandler = signal.signal(signal.SIGCHLD, signal.SIG_IGN)
 		# Session
@@ -1312,7 +1313,7 @@ class SecureHTTPServer(HTTPServer):
 		self.webshell_files = {}
 		for i in ['css', 'html', 'js', 'gif', 'jpg', 'png']:
 			for j in glob.glob(www_dir + '/*.%s' % i):
-				self.webshell_files[os.path.basename(j)] = file(j).read()
+				self.webshell_files[os.path.basename(j)] = open(j).read()
 		self.webshell_mime = mimetypes.types_map.copy()
 		self.webshell_multiplex = Multiplex(cmd, env_term)
 		# Open socket
@@ -1374,8 +1375,8 @@ def main():
 		if pid == 0:
 #			os.setsid() ?
 			os.setpgrp()
-			nullin = file('/dev/null', 'r')
-			nullout = file('/dev/null', 'w')
+			nullin = open('/dev/null', 'r')
+			nullout = open('/dev/null', 'w')
 			os.dup2(nullin.fileno(), sys.stdin.fileno())
 			os.dup2(nullout.fileno(), sys.stdout.fileno())
 			os.dup2(nullout.fileno(), sys.stderr.fileno())
@@ -1386,7 +1387,7 @@ def main():
 					os.setuid(pwd.getpwnam(o.uid).pw_uid)
 		else:
 			try:
-				file(o.pidfile, 'w+').write(str(pid) + '\n')
+				open(o.pidfile, 'w+').write(str(pid) + '\n')
 			except:
 				pass
 			sys.exit(0)
